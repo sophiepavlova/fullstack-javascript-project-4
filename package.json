@@ -2,15 +2,42 @@
   "name": "@hexlet/code",
   "version": "1.0.0",
   "description": "[![Actions Status](https://github.com/sophiepavlova/fullstack-javascript-project-4/actions/workflows/hexlet-check.yml/badge.svg)](https://github.com/sophiepavlova/fullstack-javascript-project-4/actions)",
-  "main": "index.js",
+  "type": "module",
+  "main": "src/page-loader.js",
+  "bin": {
+  "page-loader": "./bin/page-loader-cli.js"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npx jest",
+    "page-loader": "node ./bin/page-loader-cli.js",
+    "coverage": "jest --coverage",
+    "lint": "eslint ."
   },
   "author": "Olga Pavlova",
   "license": "ISC",
   "devDependencies": {
     "@eslint/js": "^9.16.0",
+    "esbuild-jest": "^0.5.0",
     "eslint": "^9.16.0",
-    "globals": "^15.13.0"
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-jest": "^28.9.0",
+    "globals": "^15.13.0",
+    "jest": "^29.7.0"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "commander": "^12.1.0"
+  },
+  "jest": {
+    "transform": {
+      "^.+\\.js$": "esbuild-jest"
+    },
+    "testEnvironment": "node",
+    "collectCoverage": true,
+    "coverageDirectory": "coverage",
+    "coverageReporters": [
+      "lcov",
+      "text"
+    ]
   }
 }
