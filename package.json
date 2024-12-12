@@ -5,7 +5,7 @@
   "type": "module",
   "main": "src/page-loader.js",
   "bin": {
-  "page-loader": "./bin/page-loader-cli.js"
+    "page-loader": "./bin/page-loader-cli.js"
   },
   "scripts": {
     "test": "npx jest",
@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "axios": "^1.7.9",
+    "cheerio": "^1.0.0",
     "commander": "^12.1.0"
   },
   "jest": {
