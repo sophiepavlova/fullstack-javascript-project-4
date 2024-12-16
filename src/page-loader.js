@@ -1,13 +1,13 @@
 import fs from 'fs';
 import fsp from 'fs/promises';
 
-import * as utils from './utils.js';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 
 import getUrlContents from './fetch-utils.js';
-
-// let filePath;
+import {
+  getSanitizedFileName, createHtmlFileName, ensureDirectoryExists, updateHtmlLinks
+} from './utils.js';
 
 const axiosInstance = axios.create({
   headers: {
@@ -16,63 +16,33 @@ const axiosInstance = axios.create({
   },
 });
 
-export const getBarePathName = (url) => {
-  const fileExtension = extractFileExtension(url);
-  const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp'];
-  const nameWithoutProtocol = url.replace(/^https?:\/\//, '');
+export const createResourcesFolder = (url, outputDirectory) => {
+  const baseName = getSanitizedFileName(url);
+  const resourcesFolderName = `${baseName}_files`; // Appending `_files` for resources
+  const resourcesDirectory = `${outputDirectory}/${resourcesFolderName}`;
 
-  if (validExtensions.includes(fileExtension.toLowerCase())) {
-    const baseName = nameWithoutProtocol.slice(0, -fileExtension.length);
-    const transformedBaseName = baseName.split('').map((symbol) =>
-      (/[^a-zA-Z0-9]/).test(symbol) ? '-' : symbol
-    ).join('');
-    return `${transformedBaseName}${fileExtension}`;
-  }
-
-  return nameWithoutProtocol.split('').map((symbol) =>
-    (/[^a-zA-Z0-9]/).test(symbol) ? '-' : symbol
-  ).join('');
-};
-
-const extractFileExtension = (url) => {
-  const match = url.match(/\.([a-zA-Z0-9]+)(\?|$)/);
-  return match ? `.${match[1]}` : '';
-};
-
-export const assembleFileName = (url) => {
-  const nameResult = getBarePathName(url);
-  return `${nameResult}.html`;
-};
-
-const ensureDirectoryExist = (destination) => fsp.mkdir(destination, {recursive: true});
-
-export const createResoursesFolder = (url, destination) => {
-  const folderName = `${getBarePathName(url)}_files`;
-  console.log(`Folder name: ${folderName}`);
-  const pathForResourses = `${destination}/${folderName}`;
-  console.log(`pathForResourses: ${pathForResourses}`);
-  return ensureDirectoryExist(destination)
-    .then(() => fsp.mkdir(pathForResourses, {recursive: true}))
+  // Create the resources directory
+  return ensureDirectoryExists(resourcesDirectory)
     .then(() => {
-      console.log('Creating resources folder at:', pathForResourses);
-      return pathForResourses;
+      console.log('Resources folder created at:', resourcesDirectory);
+      return resourcesDirectory; // Return the path of the created directory
     })
     .catch((err) => {
-      console.error(`Failed to create directory: ${err.message}`);;
+      console.error(`Failed to create resources folder: ${err.message}`);
       return Promise.reject(err);
     });
 };
 
-export const savePage = (url, destination) => {
-  const filename = assembleFileName(url);
-  const filePath = `${destination}/${filename}`;
+export const savePage = (url, outputDirectory) => {
+  const htmlFileName = createHtmlFileName(url);
+  const htmlFilePath = `${outputDirectory}/${htmlFileName}`;
 
-  return ensureDirectoryExist(destination)
-    .then(() => createResoursesFolder(url, destination))
+  return ensureDirectoryExists(outputDirectory)
+    .then(() => createResourcesFolder(url, outputDirectory))
     .then(() => getUrlContents(url))
-    .then((fileContents) => {
-      return fsp.writeFile(filePath, fileContents)
-        .then(() => ({ filePath, fileContents }));
+    .then((fileHtmlContents) => {
+      return fsp.writeFile(htmlFilePath, fileHtmlContents)
+        .then(() => ({ htmlFilePath, fileHtmlContents }));
     })
     .catch((err) => {
       console.log(`Failed to save page: ${err.message}`);
@@ -80,88 +50,75 @@ export const savePage = (url, destination) => {
     });
 };
 
-export const processImages = (fileContents, resourceFolder, filePath) => {
-  const $ = cheerio.load(fileContents);
-  const imgTags = [];
+const extractImagesSources = (fileHtmlContents) => {
+  const $ = cheerio.load(fileHtmlContents);
+  const imgSources = [];
   $('img').each((index, element) => {
     const src = $(element).attr('src');
     if (src) {
-      imgTags.push(src);
+      imgSources.push(src);
     }
   });
-  // console.log(imgTags);
-  console.log('found images:', imgTags.length);
+  console.log('Found images sources:', imgSources.length);
+  return imgSources;
+};
 
-  return downloadImages(imgTags, resourceFolder)
-    .then((links) => updateHtmlLinks(links, fileContents))
+export const handleImagesInHtml= (fileHtmlContents, resourcesDirectory, htmlFilePath) => {
+  const imgSources = extractImagesSources(fileHtmlContents);
+
+  return downloadImages(imgSources, resourcesDirectory)
+    .then((links) => updateHtmlLinks(links, fileHtmlContents))
     .then((updatedHtml) => {
-      console.log(`Saving updated HTML to: ${filePath}`);
-      return fsp.writeFile(filePath, updatedHtml);
-    // return updateHtml;
+      console.log(`Saving updated HTML to: ${htmlFilePath}`);
+      return fsp.writeFile(htmlFilePath, updatedHtml);
     })
-    .then(() => filePath);
+    .then(() => htmlFilePath);
 };
 
-const updateHtmlLinks = (links, fileContents) => {
-  const $ = cheerio.load(fileContents);
-  $('img').each((index, element) => {
-    const currentSrc = $(element).attr('src');
-    if(Object.prototype.hasOwnProperty.call(links, currentSrc)) {
-      $(element).attr('src', links[currentSrc]);
-    }
-  });
+export const downloadImage = (imgUrl, resourcesDirectory) => {
+  const fileName = getSanitizedFileName(imgUrl);
+  const filePath = `${resourcesDirectory}/${fileName}`;
+  console.log(`Preparing to download: ${imgUrl} to ${filePath}`);
 
-  return $.html();
-};
+  return axiosInstance({
+    method: 'get',
+    url: imgUrl,
+    responseType: 'stream',
+  })
+    .then((response) => {
+      console.log(`Downloading image: ${imgUrl}`);
+      const writer = fs.createWriteStream(filePath);
 
-export const downloadImages = (imgUrls, resourceFolder) => {
-  const links = {};
-  const downloadPromises = imgUrls.map((imgUrl) => {
-    const barePath = getBarePathName(imgUrl);
-    const fullPath = `${resourceFolder}/${barePath}`;
-    console.log(`Preparing to download: ${imgUrl} to ${fullPath}`);
-
-    return axiosInstance({
-      method: 'get',
-      url: imgUrl,
-      responseType: 'stream',
-    })
-      .then((response) => {
-        console.log(`Downloading image: ${imgUrl}`);
-        const writer = fs.createWriteStream(fullPath);
-
-        // Return a new promise to handle the completion of the stream
-        return new Promise((resolve, reject) => {
-          response.data.pipe(writer);
-          writer.on('finish', () => {
-            console.log(`Image saved: ${fullPath}`);
-            resolve({ fullPath, imgUrl });
-          });
-          writer.on('error', (err) => {
-            console.error(`Error saving image to ${fullPath}: ${err.message}`);
-            reject(err);
-          });
+      return new Promise((resolve, reject) => {
+        response.data.pipe(writer);
+        writer.on('finish', () => {
+          console.log(`Image saved: ${filePath}`);
+          resolve({ imgUrl, filePath });
         });
-      })
-      .then(({fullPath, imgUrl}) => {
-        links[imgUrl] = fullPath;
-        console.log(`Added to links: ${imgUrl} -> ${fullPath}`);
-      })
-      .catch((err) => {
-        console.error(`Error downloading image ${imgUrl}: ${err.message}`);
-        return Promise.reject(err);
+        writer.on('error', (err) => {
+          console.error(`Error saving image to ${filePath}: ${err.message}`);
+          reject(err);
+        });
       });
-  });
-
-  return Promise.all(downloadPromises)
-    .then(() => links)
-    .catch((err) => {
-      console.error(`Error downloading images: ${err.message}`);
-      return Promise.reject(err);
     });
 };
 
-// https://ru.hexlet.io/courses
-// ru-hexlet-io-courses.html
+export const downloadImages = (imgUrls, resourcesDirectory) => {
+  const imageDownloadPromises = imgUrls.map((imgUrl) =>
+    downloadImage(imgUrl, resourcesDirectory)
+  );
 
-// ru.hexlet.io/courses
+  return Promise.all(imageDownloadPromises)
+    .then((results) => {
+      const resourcesLinks = {};
+      results.forEach(({ imgUrl, filePath }) => {
+        resourcesLinks[imgUrl] = filePath;
+        console.log(`Mapped ${imgUrl} -> ${filePath}`);
+      });
+      return resourcesLinks;
+    })
+    .catch((err) => {
+      console.error(`Error downloading the image: ${err.message}`);
+    });
+};
+

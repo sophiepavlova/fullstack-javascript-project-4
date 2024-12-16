@@ -2,7 +2,8 @@
 
 import { Command } from 'commander';
 
-import { assembleFileName, savePage, createResoursesFolder, processImages, getBarePathName } from '../src/page-loader.js';
+import { savePage, handleImagesInHtml } from '../src/page-loader.js';
+import { getSanitizedFileName } from '../src/utils.js';
 
 const program = new Command();
 
@@ -17,14 +18,14 @@ program
 
     const { output } = options;
     savePage(url, output)
-      .then(({ filePath, fileContents }) => {
-        console.log(`Page was saved as: ${filePath}`);
-        const resourcesFolder = `${output}/${getBarePathName(url)}_files`;
-        console.log(`Using resources folder path: ${resourcesFolder}`);;
-        return processImages(fileContents, resourcesFolder, filePath);
+      .then(({ htmlFilePath, fileHtmlContents }) => {
+        console.log(`Page was saved as: ${htmlFilePath}`);
+        const resourcesDirectory = `${output}/${getSanitizedFileName(url)}_files`;
+        console.log(`Using resources folder path: ${resourcesDirectory}`);;
+        return handleImagesInHtml(fileHtmlContents, resourcesDirectory, htmlFilePath);
       })
       .then((downloadedPaths) => {
-        console.log(`Images were saved to: ${downloadedPaths}`);
+        console.log(`Images were saved to: ${JSON.stringify(downloadedPaths)}`);
       })
       .catch((err) => {
         console.error(`Error: ${err.message}`);
