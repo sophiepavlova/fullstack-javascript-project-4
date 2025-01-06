@@ -23,9 +23,9 @@ export const getSanitizedFileName = (url) => {
 
   if (['.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp'].includes(fileExtension.toLowerCase())) {
     const baseName = nameWithoutProtocol.slice(0, -fileExtension.length);
+    console.log('Original URL:', url, 'Sanitized filename:', baseName);
     return `${transformBaseName(baseName)}${fileExtension}`;
   }
-
   return transformBaseName(nameWithoutProtocol);
 };
 
@@ -37,6 +37,11 @@ export const createHtmlFileName = (url) => {
 export const ensureDirectoryExists = (outputDirectory) => fsp.mkdir(outputDirectory, { recursive: true });
 
 export const updateHtmlLinks = (links, fileContents) => {
+  // Checks if links is valid (not null or undefined)
+  if (!links || typeof links !== 'object') {
+    console.error('Invalid links object:', links);
+    return html;
+  }
   const $ = cheerio.load(fileContents);
   $('img').each((index, element) => {
     const currentSrc = $(element).attr('src');
@@ -46,6 +51,7 @@ export const updateHtmlLinks = (links, fileContents) => {
     if(Object.prototype.hasOwnProperty.call(links, currentSrc)) {
       $(element).attr('src', links[currentSrc]);
     }
+    console.log('Links object in updateHtmlLinks:', links);
   });
 
   return $.html();
@@ -54,3 +60,4 @@ export const updateHtmlLinks = (links, fileContents) => {
 export const normalizeHtml = (html) => {
   return html.replace(/\s+/g, ' ').trim();
 };
+

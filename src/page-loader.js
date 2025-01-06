@@ -5,9 +5,7 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 
 import getUrlContents from './fetch-utils.js';
-import {
-  getSanitizedFileName, createHtmlFileName, ensureDirectoryExists, updateHtmlLinks
-} from './utils.js';
+import {getSanitizedFileName, createHtmlFileName, ensureDirectoryExists, updateHtmlLinks,} from './utils.js';
 
 const axiosInstance = axios.create({
   headers: {
@@ -50,7 +48,7 @@ export const savePage = (url, outputDirectory) => {
     });
 };
 
-const extractImagesSources = (fileHtmlContents) => {
+export const extractImagesSources = (fileHtmlContents) => {
   const $ = cheerio.load(fileHtmlContents);
   const imgSources = [];
   $('img').each((index, element) => {
@@ -60,19 +58,24 @@ const extractImagesSources = (fileHtmlContents) => {
     }
   });
   console.log('Found images sources:', imgSources.length);
+  console.log('Extracted image sources:', imgSources);
   return imgSources;
 };
 
-export const handleImagesInHtml= (fileHtmlContents, resourcesDirectory, htmlFilePath) => {
+export const handleImagesInHtml = (fileHtmlContents, resourcesDirectory, htmlFilePath) => {
   const imgSources = extractImagesSources(fileHtmlContents);
 
   return downloadImages(imgSources, resourcesDirectory)
-    .then((links) => updateHtmlLinks(links, fileHtmlContents))
-    .then((updatedHtml) => {
-      console.log(`Saving updated HTML to: ${htmlFilePath}`);
-      return fsp.writeFile(htmlFilePath, updatedHtml);
+    .then((links) => {
+      const updatedHtml = updateHtmlLinks(links, fileHtmlContents);
+      console.log('Links object:', links);
+      console.log('Updated HTML after updating links:', updatedHtml);
+      return fsp.writeFile(htmlFilePath, updatedHtml).then(() => updatedHtml);
     })
-    .then(() => htmlFilePath);
+    .then((updatedHtml) => {
+      console.log('Final Updated HTML:', updatedHtml);
+      return htmlFilePath;
+    });
 };
 
 export const downloadImage = (imgUrl, resourcesDirectory) => {
